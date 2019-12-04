@@ -1,0 +1,90 @@
+version: "3.3"
+
+services:
+  db:
+    image: mysql:5.7
+    restart: always
+    environment:
+      # MySQL database db will be created and user/password will be
+      # granted all priviliges on that database. 
+      # We are also setting the default root password for MySQL
+      MYSQL_DATABASE: 'db'
+      MYSQL_USER: 'user'
+      MYSQL_PASSWORD: 'password'
+      MYSQL_ROOT_PASSWORD: 'password'
+    ports:
+      # <Port exposed> : <MySQL Port running inside container>
+      - '3306:3306'
+    expose:
+      - '3306'
+    volumes:
+      # We will use a volume to persist the data between starts and stops
+      # of the containers. 
+      - db_vol:/var/lib/mysql
+      - ./dbschema:/docker-entrypoint-initdb.d  
+    networks:
+      - backend
+
+  redis:
+    image: redis:5.0.5
+    command: bash -c "redis-server redis.conf"
+    restart: always
+    ports:
+      - '6379:6379'
+    expose:
+      - '6379'
+    volumes:
+      - ./redis:/usr/redis
+      - redis_vol:/var/lib/redis
+    working_dir: /usr/redis
+    networks:
+      - backend
+
+  minio:
+    image: minio/minio:RELEASE.2019-10-12T01-39-57Z
+    volumes:
+      - minio_vol:/data1
+    ports:
+      - "9000:9000"
+    expose:
+      - '9000'
+    networks:
+      - backend
+    environment:
+      MINIO_ACCESS_KEY: minio
+      MINIO_SECRET_KEY: minio123
+    command: server data1
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:9000/minio/health/live"]
+      interval: 30s
+      timeout: 20s
+      retries: 3
+
+  api:
+    image: node:11
+    volumes:
+      - ./src:/usr/src/app
+      - /usr/src/app/node_modules
+    working_dir: /usr/src/app
+    depends_on:
+      - db
+      - redis
+      - minio
+    command: bash -c "npm install && npm run dev"
+    ports: 
+      - 3000:3000
+    networks:
+      - backend
+
+# we are using a network to connect these 
+# two containers. They will be part of the same virtual network
+# called 'backend'. 
+networks: 
+  backend:
+
+volumes:
+  db_vol: 
+  redis_vol: 
+  minio_vol: 
+
+
